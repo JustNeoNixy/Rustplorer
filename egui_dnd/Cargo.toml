@@ -12,23 +12,20 @@ license = "MIT"
 
 
 [dependencies]
-egui_animation.workspace = true
-egui.workspace = true
-simple-easing.workspace = true
+egui_animation = "0.10"
+egui = "0.33"
+simple-easing = "1.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-time = "1"
 
 [dev-dependencies]
-egui_infinite_scroll.workspace = true
-egui_virtual_list.workspace = true
-hello_egui_utils.workspace = true
-rand.workspace = true
+egui_infinite_scroll = "0.9"
+egui_virtual_list = "0.9"
+hello_egui_utils = "0.10"
+rand = "0.9"
 
-egui_extras.workspace = true
+egui_extras = "0.33"
 color-hex = "0.2.0"
-egui = { workspace = true, features = ["color-hex"] }
-eframe = { workspace = true, default-features = true }
-
-[lints]
-workspace = true
+egui = { version = "0.33", features = ["color-hex"] }
+eframe = { version = "0.33", default-features = true }

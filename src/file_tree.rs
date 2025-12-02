@@ -117,7 +117,7 @@ pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::p
 
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = egui::vec2(32.0, 32.0);
+            ui.spacing_mut().item_spacing = egui::vec2(20.0, 20.0);
 
             // Track which item is being dragged and folder rectangles
             let mut dragged_idx: Option<usize> = None;
@@ -126,7 +126,7 @@ pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::p
             let av_width = ui.available_width() - ui.spacing().item_spacing.x;
             let columns = (av_width / 100.0).ceil() as usize;
             let width = av_width / columns as f32;
-            let size = egui::Vec2::new(width, width) - ui.spacing().item_spacing;
+            let size = egui::Vec2::new(width, width) + ui.spacing().item_spacing;
 
             // Use egui_dnd to make the children draggable
             let response = egui_dnd::dnd(ui, "file_explorer_dnd").show_vec_sized(

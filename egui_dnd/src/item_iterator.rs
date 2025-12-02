@@ -201,13 +201,17 @@ impl<'a> ItemIterator<'a> {
         if let Some((hovering_id, _pos)) = self.hovering_item {
             if hovering_id == id {
                 if let Some(dragged_item_rect) = self.dragged_item_rect {
-                    let rect = ui
-                        .allocate_ui(dragged_item_rect.size(), |ui| {
-                            ui.set_min_size(dragged_item_rect.size());
-                            content(ui, dragged_item_rect.size());
-                        })
-                        .response
-                        .rect;
+                    /*let rect = ui
+                    .allocate_ui(dragged_item_rect.size(), |ui| {
+                        ui.set_min_size(dragged_item_rect.size());
+                        content(ui, dragged_item_rect.size());
+                    })
+                    .response
+                    .rect;*/
+                    let rect = egui::Rect::from_min_size(
+                        ui.next_widget_position(),
+                        dragged_item_rect.size(),
+                    );
                     let (distance, _mark_next) = self.get_distance(dragged_item_rect, rect);
                     self.check_closest_item(distance, rect.min, None, false);
                 }
