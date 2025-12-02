@@ -108,68 +108,6 @@ pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::p
         egui::RichText::new(format!("{} {}", egui_phosphor::regular::FOLDER, node.name)).size(18.0),
     );
     ui.add_space(10.0);
-    let mut nav_request = None;
-    // Make a nice horizontal-wrapping grid, like an actual file explorer
-    egui::ScrollArea::vertical().show(ui, |ui| {
-        ui.horizontal_wrapped(|ui| {
-            // spacing between items
-            ui.spacing_mut().item_spacing = egui::vec2(32.0, 32.0);
-            for child in &mut node.children {
-                let is_folder = child.is_dir;
-                let icon = get_file_icon(&child.name, child.is_dir);
-
-                // Create a custom button with layout control
-                let (rect, resp) =
-                    ui.allocate_exact_size(egui::vec2(120.0, 80.0), egui::Sense::click());
-
-                // Draw button background on hover
-                if resp.hovered() {
-                    ui.painter().rect_filled(
-                        rect,
-                        5.0,
-                        ui.style().visuals.widgets.hovered.weak_bg_fill,
-                    );
-                }
-
-                // Draw the icon text
-                let icon_pos = rect.center_top() + egui::vec2(0.0, 8.0);
-                ui.painter().text(
-                    icon_pos,
-                    egui::Align2::CENTER_TOP,
-                    icon,
-                    egui::FontId::proportional(32.0),
-                    ui.style().visuals.text_color(),
-                );
-
-                // Draw the name text
-                let name_pos = rect.center() + egui::vec2(0.0, 20.0);
-                ui.painter().text(
-                    name_pos,
-                    egui::Align2::CENTER_TOP,
-                    &child.name,
-                    egui::FontId::proportional(14.0),
-                    ui.style().visuals.text_color(),
-                );
-
-                if resp.double_clicked() && is_folder {
-                    nav_request = Some(child.path.clone());
-                    break;
-                }
-            }
-        });
-    });
-    nav_request
-}
-
-// TODO: NEED FIXING
-// Moving items works but it breaks the layout.
-
-/*pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::path::PathBuf> {
-    // Show current directory title
-    ui.heading(
-        egui::RichText::new(format!("{} {}", egui_phosphor::regular::FOLDER, node.name)).size(18.0),
-    );
-    ui.add_space(10.0);
 
     let mut nav_request = None;
     let mut move_request: Option<(usize, usize)> = None;
@@ -185,9 +123,15 @@ pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::p
             let mut dragged_idx: Option<usize> = None;
             let mut folder_rects: Vec<(usize, egui::Rect)> = Vec::new();
 
+            let av_width = ui.available_width() - ui.spacing().item_spacing.x;
+            let columns = (av_width / 100.0).ceil() as usize;
+            let width = av_width / columns as f32;
+            let size = egui::Vec2::new(width, width) - ui.spacing().item_spacing;
+
             // Use egui_dnd to make the children draggable
-            let response = egui_dnd::dnd(ui, "file_explorer_dnd").show_vec(
+            let response = egui_dnd::dnd(ui, "file_explorer_dnd").show_vec_sized(
                 &mut node.children,
+                size,
                 |ui, child, handle, state| {
                     let is_folder = child.is_dir;
                     let icon = get_file_icon(&child.name, child.is_dir);
@@ -353,6 +297,176 @@ pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::p
                 node.children = original_children;
                 eprintln!("Failed to move file: {}", e);
             }
+        }
+    }
+
+    nav_request
+}
+
+// This is code for hozizontal view, (displaying like a file size, creation date, etc.)
+// TODO: Add file size variable + creation date
+
+/*pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::path::PathBuf> {
+    // Show current directory title
+    ui.heading(
+        egui::RichText::new(format!("{} {}", egui_phosphor::regular::FOLDER, node.name)).size(18.0),
+    );
+    ui.add_space(10.0);
+
+    let mut nav_request = None;
+    let mut move_request: Option<(usize, usize)> = None;
+
+    // Store the original order for restoring after drag
+    let original_children = node.children.clone();
+
+    // Sort children: folders first (A-Z), then files (A-Z)
+    let mut folders: Vec<&mut FileNode> = Vec::new();
+    let mut files: Vec<&mut FileNode> = Vec::new();
+    for child in &mut node.children {
+        if child.is_dir {
+            folders.push(child);
+        } else {
+            files.push(child);
+        }
+    }
+    folders.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    files.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    let mut sorted_children: Vec<_> = folders;
+    sorted_children.extend(files);
+
+    egui::ScrollArea::vertical()
+        .max_width(ui.available_width())
+        .show(ui, |ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(32.0, 16.0);
+
+            let mut dragged_idx: Option<usize> = None;
+            let mut folder_rects: Vec<(usize, egui::Rect)> = Vec::new();
+
+            let response = egui_dnd::dnd(ui, "file_explorer_dnd").show_vec(
+                &mut sorted_children,
+                |ui, child, handle, state| {
+                    if state.dragged {
+                        dragged_idx = Some(state.index);
+                    }
+
+                    ui.vertical(|ui| {
+                        handle.ui(ui, |ui| {
+                            // Allocate fixed height for horizontal layout
+                            let (rect, resp) = ui.allocate_exact_size(
+                                egui::vec2(ui.available_width(), 40.0),
+                                egui::Sense::click(),
+                            );
+
+                            // Store folder rectangles for drop detection
+                            if child.is_dir {
+                                folder_rects.push((state.index, rect));
+                            }
+
+                            let pointer_pos = ui.input(|i| i.pointer.hover_pos());
+                            let is_drag_active = dragged_idx.is_some();
+                            let is_drop_target = child.is_dir
+                                && is_drag_active
+                                && !state.dragged
+                                && Some(state.index) != dragged_idx
+                                && pointer_pos.map_or(false, |pos| rect.contains(pos));
+
+                            // Visual feedback
+                            if state.dragged {
+                                ui.painter().rect_filled(
+                                    rect,
+                                    5.0,
+                                    ui.style()
+                                        .visuals
+                                        .widgets
+                                        .inactive
+                                        .bg_fill
+                                        .gamma_multiply(0.3),
+                                );
+                            } else if is_drop_target {
+                                ui.painter().rect_filled(
+                                    rect,
+                                    5.0,
+                                    egui::Color32::from_rgba_premultiplied(100, 200, 255, 50),
+                                );
+                                ui.painter().rect_stroke(
+                                    rect,
+                                    5.0,
+                                    egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 200, 255)),
+                                    egui::StrokeKind::Outside,
+                                );
+                            } else if resp.hovered() && !is_drag_active {
+                                ui.painter().rect_filled(
+                                    rect,
+                                    5.0,
+                                    ui.style().visuals.widgets.hovered.weak_bg_fill,
+                                );
+                            }
+
+                            // Horizontal layout for icon + name
+                            ui.allocate_ui_at_rect(rect, |ui| {
+                                ui.horizontal(|ui| {
+                                    let icon = get_file_icon(&child.name, child.is_dir);
+                                    let icon_color = if state.dragged {
+                                        ui.style().visuals.text_color().gamma_multiply(0.5)
+                                    } else {
+                                        ui.style().visuals.text_color()
+                                    };
+
+                                    ui.label(
+                                        egui::RichText::new(icon).color(icon_color).size(24.0),
+                                    );
+                                    ui.label(
+                                        egui::RichText::new(&child.name)
+                                            .color(icon_color)
+                                            .size(16.0),
+                                    );
+                                });
+                            });
+
+                            // Double-click to navigate into folder
+                            if resp.double_clicked() && child.is_dir && !state.dragged {
+                                nav_request = Some(child.path.clone());
+                            }
+                        });
+                    });
+                },
+            );
+
+            // Handle dropping into folders without reordering
+            if let Some(update) = response.final_update() {
+                let from_idx = update.from;
+                let pointer_pos = ui.input(|i| i.pointer.hover_pos());
+
+                if let Some(pos) = pointer_pos {
+                    for (folder_idx, rect) in &folder_rects {
+                        if rect.contains(pos) && *folder_idx != from_idx {
+                            move_request = Some((from_idx, *folder_idx));
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+
+    // Execute move if requested
+    if let Some((from_idx, target_folder_idx)) = move_request {
+        let moved_item = original_children[from_idx].clone();
+        let target_folder = &original_children[target_folder_idx];
+        let target_path = target_folder.path.join(&moved_item.name);
+
+        if let Err(e) = std::fs::rename(&moved_item.path, &target_path) {
+            eprintln!("Failed to move file: {}", e);
+        } else {
+            // Refresh target folder and remove from current list
+            node.children.retain(|c| c.path != moved_item.path);
+            if let Some(target) = node
+                .children
+                .iter_mut()
+                .find(|c| c.path == target_folder.path)
+            {
+                target.refresh_children();
+            }
+            println!("Moved {} into {}", moved_item.name, target_folder.name);
         }
     }
 
