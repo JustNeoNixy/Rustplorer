@@ -102,13 +102,10 @@ fn get_file_icon(filename: &str, is_folder: bool) -> &'static str {
     }
 }
 
-pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::path::PathBuf> {
-    // Show current directory title
-    ui.heading(
-        egui::RichText::new(format!("{} {}", egui_phosphor::regular::FOLDER, node.name)).size(18.0),
-    );
-    ui.add_space(10.0);
+// this is code for Grid file view.
+// I forgot to add sorting system lol
 
+/*pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::path::PathBuf> {
     let mut nav_request = None;
     let mut move_request: Option<(usize, usize)> = None;
 
@@ -301,17 +298,38 @@ pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::p
     }
 
     nav_request
-}
+}*/
 
 // This is code for hozizontal view, (displaying like a file size, creation date, etc.)
-// TODO: Add file size variable + creation date
+// TODO: Fix drag and dropping visuals. (check Grid view)
+// and add more comments.
 
-/*pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::path::PathBuf> {
-    // Show current directory title
-    ui.heading(
-        egui::RichText::new(format!("{} {}", egui_phosphor::regular::FOLDER, node.name)).size(18.0),
-    );
-    ui.add_space(10.0);
+pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::path::PathBuf> {
+    egui::TopBottomPanel::top("placeholder").show_inside(ui, |ui| {
+        ui.style_mut().visuals.widgets.inactive.weak_bg_fill = ui.visuals().faint_bg_color;
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Name").strong().size(14.0));
+            ui.add_space(280.0);
+            ui.separator();
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.add_space(35.0);
+                ui.allocate_ui_with_layout(
+                    egui::vec2(100.0, 20.0),
+                    egui::Layout::right_to_left(egui::Align::Center),
+                    |ui| {
+                        ui.label(egui::RichText::new("Size").strong().size(14.0));
+                    },
+                );
+                ui.add_space(35.0);
+                ui.separator();
+                ui.add_space(30.0);
+                ui.label(egui::RichText::new("Creation Date").strong().size(14.0));
+                ui.add_space(8.0);
+            });
+        });
+        ui.add_space(4.0);
+    });
 
     let mut nav_request = None;
     let mut move_request: Option<(usize, usize)> = None;
@@ -353,7 +371,7 @@ pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::p
                         handle.ui(ui, |ui| {
                             // Allocate fixed height for horizontal layout
                             let (rect, resp) = ui.allocate_exact_size(
-                                egui::vec2(ui.available_width(), 40.0),
+                                egui::vec2(ui.available_width(), 30.0),
                                 egui::Sense::click(),
                             );
 
@@ -403,7 +421,7 @@ pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::p
                             }
 
                             // Horizontal layout for icon + name
-                            ui.allocate_ui_at_rect(rect, |ui| {
+                            ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
                                 ui.horizontal(|ui| {
                                     let icon = get_file_icon(&child.name, child.is_dir);
                                     let icon_color = if state.dragged {
@@ -419,6 +437,52 @@ pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::p
                                         egui::RichText::new(&child.name)
                                             .color(icon_color)
                                             .size(16.0),
+                                    );
+
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if !child.is_dir {
+                                                use std::os::unix::fs::MetadataExt;
+
+                                                let meta = std::fs::metadata(&child.path).unwrap();
+                                                let size = meta.size();
+
+                                                ui.add_sized(
+                                                    [100.0, 20.0],
+                                                    egui::Label::new(
+                                                        egui::RichText::new(format_file_size(size))
+                                                            .color(icon_color)
+                                                            .size(16.0)
+                                                            .monospace(),
+                                                    ),
+                                                );
+                                            } else {
+                                                ui.add_sized(
+                                                    [100.0, 20.0],
+                                                    egui::Label::new(
+                                                        egui::RichText::new("")
+                                                            .size(16.0)
+                                                            .monospace(),
+                                                    ),
+                                                );
+                                            }
+
+                                            let meta = std::fs::metadata(&child.path).unwrap();
+                                            let created: std::time::SystemTime = meta
+                                                .created()
+                                                .expect("Couldn't get file creation date.");
+                                            let datetime: chrono::DateTime<chrono::Utc> =
+                                                created.into();
+                                            let formatted =
+                                                datetime.format("%Y-%m-%d %H:%M:%S").to_string();
+
+                                            ui.label(
+                                                egui::RichText::new(formatted)
+                                                    .color(icon_color)
+                                                    .size(16.0),
+                                            );
+                                        },
                                     );
                                 });
                             });
@@ -471,4 +535,26 @@ pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::p
     }
 
     nav_request
-}*/
+}
+
+// File size formatting
+fn format_file_size(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    const THRESHOLD: f64 = 1024.0;
+
+    if bytes == 0 {
+        return "0 B".to_string();
+    }
+
+    let bytes_f64 = bytes as f64;
+    let index = (bytes_f64.log2() / THRESHOLD.log2()).floor() as usize;
+    let index = index.min(UNITS.len() - 1);
+
+    let size = bytes_f64 / THRESHOLD.powi(index as i32);
+
+    if index == 0 {
+        format!("{} {}", bytes, UNITS[index])
+    } else {
+        format!("{:.2} {}", size, UNITS[index])
+    }
+}

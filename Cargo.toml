@@ -5,9 +5,8 @@ edition = "2024"
 
 [dependencies]
 eframe = "0.33"
-egui-modal = "0.6"
-egui-toast = "0.18"
 egui-phosphor = "0.11"
 egui_nerdfonts = { path = "./egui_nerdfonts" }
 whoami = "1.6"
 egui_dnd = { path = "./egui_dnd" }
+chrono = "0.4"
