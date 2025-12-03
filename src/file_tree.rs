@@ -23,10 +23,6 @@ impl FileNode {
                 .filter_map(|entry| entry.ok())
                 .map(|entry| FileNode::new(&entry.path()))
                 .collect()
-            /*.unwrap()
-            .filter_map(|entry| entry.ok())
-            .map(|entry| FileNode::new(&entry.path()))
-            .collect()*/
         } else {
             Vec::new()
         };
@@ -38,26 +34,6 @@ impl FileNode {
             children,
         }
     }
-
-    /*pub fn refresh_children(&mut self) {
-        if self.is_dir {
-            // Clear existing children
-            self.children.clear();
-
-            // Re-read directory contents
-            if let Ok(entries) = std::fs::read_dir(&self.path) {
-                for entry in entries {
-                    if let Ok(entry) = entry {
-                        let child_path = entry.path();
-                        let child_node = FileNode::new(&child_path);
-                        self.children.push(child_node);
-                    }
-                }
-            }
-        }
-
-        build_file_tree(&self.path);
-    }*/
 
     pub fn refresh_children(&mut self) {
         if self.is_dir {
@@ -102,15 +78,103 @@ fn get_file_icon(filename: &str, is_folder: bool) -> &'static str {
     }
 }
 
-// this is code for Grid file view.
-// I forgot to add sorting system lol
+pub fn render_file_node(
+    ui: &mut egui::Ui,
+    node: &mut FileNode,
+    settings: &crate::settings::Settings,
+) -> Option<std::path::PathBuf> {
+    match settings.view {
+        crate::settings::View::Grid => render_grid_view(ui, node, settings),
+        crate::settings::View::Normal => render_normal_view(ui, node, settings),
+    }
+}
 
-/*pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::path::PathBuf> {
+// File size formatting
+fn format_file_size(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    const THRESHOLD: f64 = 1024.0;
+
+    if bytes == 0 {
+        return "0 B".to_string();
+    }
+
+    let bytes_f64 = bytes as f64;
+    let index = (bytes_f64.log2() / THRESHOLD.log2()).floor() as usize;
+    let index = index.min(UNITS.len() - 1);
+
+    let size = bytes_f64 / THRESHOLD.powi(index as i32);
+
+    if index == 0 {
+        format!("{} {}", bytes, UNITS[index])
+    } else {
+        format!("{:.2} {}", size, UNITS[index])
+    }
+}
+
+// TODO: Dragging a file over a folder doesn't highlight it blue. It only does when the folder is after a file.
+// (BOTH VIEWS! NORMAL AND GRID ONE)
+fn render_grid_view(
+    ui: &mut egui::Ui,
+    node: &mut FileNode,
+    settings: &crate::settings::Settings,
+) -> Option<std::path::PathBuf> {
     let mut nav_request = None;
     let mut move_request: Option<(usize, usize)> = None;
 
-    // Store the original order before any drag operation
+    // Store the original order for restoring after drag
     let original_children = node.children.clone();
+
+    // Sort children: folders first (A-Z), then files (A-Z)
+    let mut folder_indices: Vec<usize> = Vec::new();
+    let mut file_indices: Vec<usize> = Vec::new();
+
+    for (idx, child) in node.children.iter().enumerate() {
+        if !settings.show_hidden_files && child.name.starts_with('.') {
+            continue;
+        }
+
+        if child.is_dir {
+            folder_indices.push(idx);
+        } else {
+            file_indices.push(idx);
+        }
+    }
+
+    if settings.sort_items {
+        folder_indices.sort_by(|&a, &b| {
+            node.children[a]
+                .name
+                .to_lowercase()
+                .cmp(&node.children[b].name.to_lowercase())
+        });
+        file_indices.sort_by(|&a, &b| {
+            node.children[a]
+                .name
+                .to_lowercase()
+                .cmp(&node.children[b].name.to_lowercase())
+        });
+    };
+
+    let mut sorted_indices = if settings.sort_folders_first {
+        folder_indices
+            .into_iter()
+            .chain(file_indices)
+            .collect::<Vec<_>>()
+    } else {
+        let mut all = folder_indices
+            .into_iter()
+            .chain(file_indices)
+            .collect::<Vec<_>>();
+        if settings.sort_items {
+            all.sort_by(|&a, &b| {
+                node.children[a]
+                    .name
+                    .to_lowercase()
+                    .cmp(&node.children[b].name.to_lowercase())
+            });
+        }
+        all
+    };
 
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.horizontal_wrapped(|ui| {
@@ -127,9 +191,10 @@ fn get_file_icon(filename: &str, is_folder: bool) -> &'static str {
 
             // Use egui_dnd to make the children draggable
             let response = egui_dnd::dnd(ui, "file_explorer_dnd").show_vec_sized(
-                &mut node.children,
+                &mut sorted_indices,
                 size,
-                |ui, child, handle, state| {
+                |ui, &mut child_idx, handle, state| {
+                    let child = &node.children[child_idx];
                     let is_folder = child.is_dir;
                     let icon = get_file_icon(&child.name, child.is_dir);
 
@@ -173,19 +238,6 @@ fn get_file_icon(filename: &str, is_folder: bool) -> &'static str {
                                         .bg_fill
                                         .gamma_multiply(0.3),
                                 );
-                            } else if is_drop_target {
-                                // This folder is a valid drop target - highlight it blue
-                                ui.painter().rect_filled(
-                                    rect,
-                                    5.0,
-                                    egui::Color32::from_rgba_premultiplied(100, 200, 255, 50),
-                                );
-                                ui.painter().rect_stroke(
-                                    rect,
-                                    5.0,
-                                    egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 200, 255)),
-                                    egui::StrokeKind::Outside,
-                                );
                             } else if resp.hovered() && !is_drag_active {
                                 // Hovering (only when not dragging) - show hover style
                                 ui.painter().rect_filled(
@@ -221,6 +273,21 @@ fn get_file_icon(filename: &str, is_folder: bool) -> &'static str {
                                 icon_color,
                             );
 
+                            // Draw drop target highlight after content (on top)
+                            if is_drop_target {
+                                ui.painter().rect_filled(
+                                    rect,
+                                    5.0,
+                                    egui::Color32::from_rgba_premultiplied(100, 200, 255, 50),
+                                );
+                                ui.painter().rect_stroke(
+                                    rect,
+                                    5.0,
+                                    egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 200, 255)),
+                                    egui::StrokeKind::Outside,
+                                );
+                            }
+
                             // Double-click to navigate into folders
                             if resp.double_clicked() && is_folder && !is_drag_active {
                                 nav_request = Some(child.path.clone());
@@ -232,7 +299,7 @@ fn get_file_icon(filename: &str, is_folder: bool) -> &'static str {
 
             // Handle drop
             if let Some(update) = response.final_update() {
-                let from_idx = update.from;
+                let from_idx = sorted_indices[update.from];
 
                 // Check if pointer was released over a folder
                 let pointer_pos = ui.input(|i| i.pointer.hover_pos());
@@ -241,8 +308,9 @@ fn get_file_icon(filename: &str, is_folder: bool) -> &'static str {
                     // Find which folder (if any) the item was dropped on
                     let mut dropped_on_folder = false;
                     for (folder_idx, rect) in &folder_rects {
-                        if rect.contains(pos) && *folder_idx != from_idx {
-                            move_request = Some((from_idx, *folder_idx));
+                        if rect.contains(pos) && *folder_idx != update.from {
+                            let target_folder_idx = sorted_indices[*folder_idx];
+                            move_request = Some((from_idx, target_folder_idx));
                             dropped_on_folder = true;
                             break;
                         }
@@ -260,7 +328,7 @@ fn get_file_icon(filename: &str, is_folder: bool) -> &'static str {
         });
     });
 
-    // Execute move into folder if requested
+    // Execute move if requested
     if let Some((from_idx, target_folder_idx)) = move_request {
         // Find the original item by name since indices might have changed
         let moved_item = original_children[from_idx].clone();
@@ -298,20 +366,19 @@ fn get_file_icon(filename: &str, is_folder: bool) -> &'static str {
     }
 
     nav_request
-}*/
+}
 
-// This is code for hozizontal view, (displaying like a file size, creation date, etc.)
-// TODO: Fix drag and dropping visuals. (check Grid view)
-// and add more comments.
-
-pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::path::PathBuf> {
+fn render_normal_view(
+    ui: &mut egui::Ui,
+    node: &mut FileNode,
+    settings: &crate::settings::Settings,
+) -> Option<std::path::PathBuf> {
     egui::TopBottomPanel::top("placeholder").show_inside(ui, |ui| {
         ui.style_mut().visuals.widgets.inactive.weak_bg_fill = ui.visuals().faint_bg_color;
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Name").strong().size(14.0));
             ui.add_space(280.0);
-            ui.separator();
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(35.0);
                 ui.allocate_ui_with_layout(
@@ -325,7 +392,8 @@ pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::p
                 ui.separator();
                 ui.add_space(30.0);
                 ui.label(egui::RichText::new("Creation Date").strong().size(14.0));
-                ui.add_space(8.0);
+                ui.add_space(35.0);
+                ui.separator();
             });
         });
         ui.add_space(4.0);
@@ -338,31 +406,73 @@ pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::p
     let original_children = node.children.clone();
 
     // Sort children: folders first (A-Z), then files (A-Z)
-    let mut folders: Vec<&mut FileNode> = Vec::new();
-    let mut files: Vec<&mut FileNode> = Vec::new();
-    for child in &mut node.children {
+    let mut folder_indices: Vec<usize> = Vec::new();
+    let mut file_indices: Vec<usize> = Vec::new();
+
+    for (idx, child) in node.children.iter().enumerate() {
+        if !settings.show_hidden_files && child.name.starts_with('.') {
+            continue;
+        }
+
         if child.is_dir {
-            folders.push(child);
+            folder_indices.push(idx);
         } else {
-            files.push(child);
+            file_indices.push(idx);
         }
     }
-    folders.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-    files.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-    let mut sorted_children: Vec<_> = folders;
-    sorted_children.extend(files);
+
+    if settings.sort_items {
+        folder_indices.sort_by(|&a, &b| {
+            node.children[a]
+                .name
+                .to_lowercase()
+                .cmp(&node.children[b].name.to_lowercase())
+        });
+        file_indices.sort_by(|&a, &b| {
+            node.children[a]
+                .name
+                .to_lowercase()
+                .cmp(&node.children[b].name.to_lowercase())
+        });
+    };
+
+    let mut sorted_indices = if settings.sort_folders_first {
+        folder_indices
+            .into_iter()
+            .chain(file_indices)
+            .collect::<Vec<_>>()
+    } else {
+        let mut all = folder_indices
+            .into_iter()
+            .chain(file_indices)
+            .collect::<Vec<_>>();
+        if settings.sort_items {
+            all.sort_by(|&a, &b| {
+                node.children[a]
+                    .name
+                    .to_lowercase()
+                    .cmp(&node.children[b].name.to_lowercase())
+            });
+        }
+        all
+    };
 
     egui::ScrollArea::vertical()
         .max_width(ui.available_width())
         .show(ui, |ui| {
             ui.spacing_mut().item_spacing = egui::vec2(32.0, 16.0);
 
+            // Track which item is being dragged and folder rectangles
             let mut dragged_idx: Option<usize> = None;
             let mut folder_rects: Vec<(usize, egui::Rect)> = Vec::new();
 
             let response = egui_dnd::dnd(ui, "file_explorer_dnd").show_vec(
-                &mut sorted_children,
-                |ui, child, handle, state| {
+                &mut sorted_indices,
+                |ui, &mut child_idx, handle, state| {
+                    let child = &node.children[child_idx];
+                    let is_folder = child.is_dir;
+
+                    // Track which item is being dragged
                     if state.dragged {
                         dragged_idx = Some(state.index);
                     }
@@ -371,25 +481,26 @@ pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::p
                         handle.ui(ui, |ui| {
                             // Allocate fixed height for horizontal layout
                             let (rect, resp) = ui.allocate_exact_size(
-                                egui::vec2(ui.available_width(), 30.0),
+                                egui::vec2(ui.available_width() - 3.0, 30.0),
                                 egui::Sense::click(),
                             );
 
-                            // Store folder rectangles for drop detection
-                            if child.is_dir {
+                            if is_folder {
                                 folder_rects.push((state.index, rect));
                             }
 
+                            // Check if mouse is over this folder during drag
                             let pointer_pos = ui.input(|i| i.pointer.hover_pos());
                             let is_drag_active = dragged_idx.is_some();
-                            let is_drop_target = child.is_dir
+                            let is_drop_target = is_folder
                                 && is_drag_active
-                                && !state.dragged
-                                && Some(state.index) != dragged_idx
+                                && !state.dragged // This is NOT the item being dragged
+                                && Some(state.index) != dragged_idx // Not dragging onto itself
                                 && pointer_pos.map_or(false, |pos| rect.contains(pos));
 
                             // Visual feedback
                             if state.dragged {
+                                // Being dragged - show semi-transparent
                                 ui.painter().rect_filled(
                                     rect,
                                     5.0,
@@ -488,7 +599,7 @@ pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::p
                             });
 
                             // Double-click to navigate into folder
-                            if resp.double_clicked() && child.is_dir && !state.dragged {
+                            if resp.double_clicked() && is_folder && !is_drag_active {
                                 nav_request = Some(child.path.clone());
                             }
                         });
@@ -496,65 +607,71 @@ pub fn render_file_node(ui: &mut egui::Ui, node: &mut FileNode) -> Option<std::p
                 },
             );
 
-            // Handle dropping into folders without reordering
+            // Handle drop
             if let Some(update) = response.final_update() {
-                let from_idx = update.from;
+                let from_idx = sorted_indices[update.from];
+
+                // Check if pointer was released over a folder
                 let pointer_pos = ui.input(|i| i.pointer.hover_pos());
 
                 if let Some(pos) = pointer_pos {
+                    // Find which folder (if any) the item was dropped on
+                    let mut dropped_on_folder = false;
                     for (folder_idx, rect) in &folder_rects {
-                        if rect.contains(pos) && *folder_idx != from_idx {
-                            move_request = Some((from_idx, *folder_idx));
+                        if rect.contains(pos) && *folder_idx != update.from {
+                            let target_folder_idx = sorted_indices[*folder_idx];
+                            move_request = Some((from_idx, target_folder_idx));
+                            dropped_on_folder = true;
                             break;
                         }
                     }
+
+                    // If not dropped on a folder, restore original order
+                    if !dropped_on_folder {
+                        node.children = original_children.clone();
+                    }
+                } else {
+                    // No valid drop position, restore original order
+                    node.children = original_children.clone();
                 }
             }
         });
 
     // Execute move if requested
     if let Some((from_idx, target_folder_idx)) = move_request {
+        // Find the original item by name since indices might have changed
         let moved_item = original_children[from_idx].clone();
-        let target_folder = &original_children[target_folder_idx];
+
+        // Find the target folder in original children
+        let target_folder = &original_children.clone()[target_folder_idx];
         let target_path = target_folder.path.join(&moved_item.name);
 
-        if let Err(e) = std::fs::rename(&moved_item.path, &target_path) {
-            eprintln!("Failed to move file: {}", e);
-        } else {
-            // Refresh target folder and remove from current list
-            node.children.retain(|c| c.path != moved_item.path);
-            if let Some(target) = node
-                .children
-                .iter_mut()
-                .find(|c| c.path == target_folder.path)
-            {
-                target.refresh_children();
+        // Perform actual filesystem move
+        match std::fs::rename(&moved_item.path, &target_path) {
+            Ok(_) => {
+                // Successfully moved - restore original order and refresh
+                node.children = original_children;
+
+                // Remove the moved item
+                node.children.retain(|child| child.path != moved_item.path);
+
+                // Refresh the target folder to show the new item
+                if let Some(target) = node
+                    .children
+                    .iter_mut()
+                    .find(|c| c.path == target_folder.path)
+                {
+                    target.refresh_children();
+                }
+
+                println!("Moved {} into {}", moved_item.name, target_folder.name);
             }
-            println!("Moved {} into {}", moved_item.name, target_folder.name);
+            Err(e) => {
+                // Failed to move - restore original order
+                node.children = original_children;
+                eprintln!("Failed to move file: {}", e);
+            }
         }
     }
-
     nav_request
-}
-
-// File size formatting
-fn format_file_size(bytes: u64) -> String {
-    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
-    const THRESHOLD: f64 = 1024.0;
-
-    if bytes == 0 {
-        return "0 B".to_string();
-    }
-
-    let bytes_f64 = bytes as f64;
-    let index = (bytes_f64.log2() / THRESHOLD.log2()).floor() as usize;
-    let index = index.min(UNITS.len() - 1);
-
-    let size = bytes_f64 / THRESHOLD.powi(index as i32);
-
-    if index == 0 {
-        format!("{} {}", bytes, UNITS[index])
-    } else {
-        format!("{:.2} {}", size, UNITS[index])
-    }
 }

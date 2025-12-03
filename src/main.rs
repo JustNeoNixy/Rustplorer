@@ -6,6 +6,7 @@
 use eframe::egui::{self, ViewportCommand};
 
 mod file_tree;
+mod settings;
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -29,6 +30,8 @@ struct MyApp {
     history: Vec<std::path::PathBuf>,
     history_index: usize,
     file_tree: file_tree::FileNode,
+    settings: settings::Settings,
+    show_settings: bool,
 }
 
 impl MyApp {
@@ -49,6 +52,8 @@ impl MyApp {
             history: vec![initial_path.clone()],
             history_index: 0,
             file_tree: tree,
+            settings: settings::Settings::default(),
+            show_settings: false,
         }
     }
 
@@ -87,7 +92,15 @@ impl eframe::App for MyApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        custom_window_frame(ctx, "Rustplorer", |ui| {
+        self.settings.apply_theme(ctx);
+
+        if self.show_settings {
+            self.settings.ui(ctx, &mut self.show_settings);
+        }
+
+        let mut show_settings_toggle = false;
+
+        custom_window_frame(ctx, "Rustplorer", &mut show_settings_toggle, |ui| {
             egui::SidePanel::left("Favorites")
                 .resizable(true)
                 .default_width(150.0)
@@ -140,16 +153,27 @@ impl eframe::App for MyApp {
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, true])
                     .show(ui, |ui| {
-                        if let Some(target) = file_tree::render_file_node(ui, &mut self.file_tree) {
+                        if let Some(target) =
+                            file_tree::render_file_node(ui, &mut self.file_tree, &self.settings)
+                        {
                             self.go_to_directory(&target);
                         }
                     });
             });
         });
+
+        if show_settings_toggle {
+            self.show_settings = !self.show_settings;
+        }
     }
 }
 
-fn custom_window_frame(ctx: &egui::Context, title: &str, add_contents: impl FnOnce(&mut egui::Ui)) {
+fn custom_window_frame(
+    ctx: &egui::Context,
+    title: &str,
+    show_settings_toggle: &mut bool,
+    add_contents: impl FnOnce(&mut egui::Ui),
+) {
     use egui::{CentralPanel, UiBuilder};
 
     let panel_frame = egui::Frame::new()
@@ -167,7 +191,7 @@ fn custom_window_frame(ctx: &egui::Context, title: &str, add_contents: impl FnOn
             rect.max.y = rect.min.y + title_bar_height;
             rect
         };
-        title_bar_ui(ui, title_bar_rect, title);
+        title_bar_ui(ui, title_bar_rect, title, show_settings_toggle);
 
         // Add the contents:
         let content_rect = {
@@ -181,7 +205,12 @@ fn custom_window_frame(ctx: &egui::Context, title: &str, add_contents: impl FnOn
     });
 }
 
-fn title_bar_ui(ui: &mut egui::Ui, title_bar_rect: eframe::epaint::Rect, title: &str) {
+fn title_bar_ui(
+    ui: &mut egui::Ui,
+    title_bar_rect: eframe::epaint::Rect,
+    title: &str,
+    show_settings_toggle: &mut bool,
+) {
     use egui::{Align2, FontId, Id, PointerButton, Sense, UiBuilder, vec2};
 
     let painter = ui.painter();
@@ -220,6 +249,27 @@ fn title_bar_ui(ui: &mut egui::Ui, title_bar_rect: eframe::epaint::Rect, title: 
     if title_bar_response.drag_started_by(PointerButton::Primary) {
         ui.ctx().send_viewport_cmd(ViewportCommand::StartDrag);
     }
+
+    ui.scope_builder(
+        UiBuilder::new()
+            .max_rect(title_bar_rect)
+            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+        |ui| {
+            ui.spacing_mut().item_spacing.x = 0.0;
+            ui.visuals_mut().button_frame = false;
+            ui.add_space(8.0);
+
+            let settings_response = ui
+                .add(egui::Button::new(
+                    egui::RichText::new(format!("{}", egui_nerdfonts::regular::GEAR_1)).size(18.0),
+                ))
+                .on_hover_text("Settings");
+
+            if settings_response.clicked() {
+                *show_settings_toggle = true;
+            }
+        },
+    );
 
     ui.scope_builder(
         UiBuilder::new()
