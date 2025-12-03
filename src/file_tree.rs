@@ -74,6 +74,8 @@ fn get_file_icon(filename: &str, is_folder: bool) -> &'static str {
         "mp3" | "wav" | "ogg" => egui_nerdfonts::regular::AUDIO_VIDEO,
         "gitignore" => egui_nerdfonts::regular::GIT,
         "pdf" => egui_nerdfonts::regular::FILE_PDF,
+        "c" => egui_nerdfonts::regular::LANGUAGE_C,
+        "cpp" => egui_nerdfonts::regular::LANGUAGE_CPP,
         _ => egui_nerdfonts::regular::FILE,
     }
 }
@@ -111,8 +113,6 @@ fn format_file_size(bytes: u64) -> String {
     }
 }
 
-// TODO: Dragging a file over a folder doesn't highlight it blue. It only does when the folder is after a file.
-// (BOTH VIEWS! NORMAL AND GRID ONE)
 fn render_grid_view(
     ui: &mut egui::Ui,
     node: &mut FileNode,
@@ -218,7 +218,7 @@ fn render_grid_view(
 
                             // Check if mouse is over this folder during drag
                             let pointer_pos = ui.input(|i| i.pointer.hover_pos());
-                            let is_drag_active = dragged_idx.is_some();
+                            let is_drag_active = ui.input(|i| i.pointer.is_decidedly_dragging());
                             let is_drop_target = is_folder
                                 && is_drag_active
                                 && !state.dragged // This is NOT the item being dragged
@@ -238,8 +238,19 @@ fn render_grid_view(
                                         .bg_fill
                                         .gamma_multiply(0.3),
                                 );
+                            } else if is_drop_target {
+                                ui.painter().rect_filled(
+                                    rect,
+                                    5.0,
+                                    egui::Color32::from_rgba_premultiplied(100, 200, 255, 50),
+                                );
+                                ui.painter().rect_stroke(
+                                    rect,
+                                    5.0,
+                                    egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 200, 255)),
+                                    egui::StrokeKind::Outside,
+                                );
                             } else if resp.hovered() && !is_drag_active {
-                                // Hovering (only when not dragging) - show hover style
                                 ui.painter().rect_filled(
                                     rect,
                                     5.0,
@@ -272,21 +283,6 @@ fn render_grid_view(
                                 egui::FontId::proportional(14.0),
                                 icon_color,
                             );
-
-                            // Draw drop target highlight after content (on top)
-                            if is_drop_target {
-                                ui.painter().rect_filled(
-                                    rect,
-                                    5.0,
-                                    egui::Color32::from_rgba_premultiplied(100, 200, 255, 50),
-                                );
-                                ui.painter().rect_stroke(
-                                    rect,
-                                    5.0,
-                                    egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 200, 255)),
-                                    egui::StrokeKind::Outside,
-                                );
-                            }
 
                             // Double-click to navigate into folders
                             if resp.double_clicked() && is_folder && !is_drag_active {
@@ -491,7 +487,7 @@ fn render_normal_view(
 
                             // Check if mouse is over this folder during drag
                             let pointer_pos = ui.input(|i| i.pointer.hover_pos());
-                            let is_drag_active = dragged_idx.is_some();
+                            let is_drag_active = ui.input(|i| i.pointer.is_decidedly_dragging());
                             let is_drop_target = is_folder
                                 && is_drag_active
                                 && !state.dragged // This is NOT the item being dragged

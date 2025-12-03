@@ -8,7 +8,42 @@ use eframe::egui::{self, ViewportCommand};
 mod file_tree;
 mod settings;
 
+// For some reason it doesnt want to show a window if you run it in home directory.
+// TODO: Fixes
 fn main() -> eframe::Result {
+    let args: Vec<String> = std::env::args().collect();
+    let initial_path = if args.len() > 1 {
+        let path_str = if args[1].starts_with("~/") {
+            args[1].replacen(
+                "~",
+                &std::env::var("HOME").unwrap_or_else(|_| ".".to_string()),
+                1,
+            )
+        } else if args[1] == "~" {
+            std::env::var("HOME").unwrap_or_else(|_| ".".to_string())
+        } else {
+            args[1].clone()
+        };
+
+        let path = std::path::PathBuf::from(&path_str);
+
+        if path.exists() {
+            if path.is_file() {
+                path.parent().unwrap_or(&path).to_path_buf()
+            } else {
+                path
+            }
+        } else {
+            eprintln!(
+                "Warning: Path '{}' does not exist. Using current directory.",
+                args[1]
+            );
+            std::env::current_dir().unwrap_or_else(|_| "./".into())
+        }
+    } else {
+        std::env::current_dir().unwrap_or_else(|_| "./".into())
+    };
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_decorations(false) // Hide the OS-specific "chrome" around the window
@@ -21,7 +56,7 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Rustplorer", // unused title
         options,
-        Box::new(|cc| Ok(Box::new(MyApp::new(cc)))),
+        Box::new(move |cc| Ok(Box::new(MyApp::new(cc, initial_path)))),
     )
 }
 
@@ -35,7 +70,7 @@ struct MyApp {
 }
 
 impl MyApp {
-    fn new(cc: &eframe::CreationContext) -> Self {
+    fn new(cc: &eframe::CreationContext, initial_path: std::path::PathBuf) -> Self {
         let mut fonts = egui::FontDefinitions::default();
 
         egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
@@ -44,7 +79,6 @@ impl MyApp {
 
         cc.egui_ctx.set_fonts(fonts);
 
-        let initial_path = std::env::current_dir().unwrap_or_else(|_| "./".into());
         let tree = file_tree::build_file_tree(&initial_path);
 
         Self {
@@ -291,7 +325,6 @@ fn close_maximize_minimize(ui: &mut egui::Ui) {
     let button_height = 18.0;
 
     let close_response = ui
-        //.add(Button::new(RichText::new("❌").size(button_height)))
         .add(Button::new(
             RichText::new(format!("{}", egui_phosphor::regular::X)).size(button_height),
         ))
@@ -303,7 +336,6 @@ fn close_maximize_minimize(ui: &mut egui::Ui) {
     let is_maximized = ui.input(|i| i.viewport().maximized.unwrap_or(false));
     if is_maximized {
         let maximized_response = ui
-            //.add(Button::new(RichText::new("🗗").size(button_height)))
             .add(Button::new(
                 RichText::new(format!("{}", egui_phosphor::regular::CORNERS_IN))
                     .size(button_height),
@@ -315,7 +347,6 @@ fn close_maximize_minimize(ui: &mut egui::Ui) {
         }
     } else {
         let maximized_response = ui
-            //.add(Button::new(RichText::new("🗗").size(button_height)))
             .add(Button::new(
                 RichText::new(format!("{}", egui_phosphor::regular::CORNERS_OUT))
                     .size(button_height),
@@ -327,7 +358,6 @@ fn close_maximize_minimize(ui: &mut egui::Ui) {
     }
 
     let minimized_response = ui
-        //.add(Button::new(RichText::new("🗕").size(button_height)))
         .add(Button::new(
             RichText::new(format!("{}", egui_phosphor::regular::CARET_DOWN)).size(button_height),
         ))
