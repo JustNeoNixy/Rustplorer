@@ -6,6 +6,7 @@
 use eframe::egui::{self, ViewportCommand};
 
 mod file_tree;
+mod helpers;
 mod settings;
 
 // For some reason it doesnt want to show a window if you run it in home directory.

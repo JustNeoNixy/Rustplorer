@@ -1,11 +1,13 @@
+use crate::helpers::*;
+
 use eframe::egui;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub struct FileNode {
-    name: String,
-    path: std::path::PathBuf,
-    is_dir: bool,
-    children: Vec<FileNode>,
+    pub name: String,
+    pub path: std::path::PathBuf,
+    pub is_dir: bool,
+    pub children: Vec<FileNode>,
 }
 
 impl FileNode {
@@ -91,28 +93,7 @@ pub fn render_file_node(
     }
 }
 
-// File size formatting
-fn format_file_size(bytes: u64) -> String {
-    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
-    const THRESHOLD: f64 = 1024.0;
-
-    if bytes == 0 {
-        return "0 B".to_string();
-    }
-
-    let bytes_f64 = bytes as f64;
-    let index = (bytes_f64.log2() / THRESHOLD.log2()).floor() as usize;
-    let index = index.min(UNITS.len() - 1);
-
-    let size = bytes_f64 / THRESHOLD.powi(index as i32);
-
-    if index == 0 {
-        format!("{} {}", bytes, UNITS[index])
-    } else {
-        format!("{:.2} {}", size, UNITS[index])
-    }
-}
-
+// GRID VIEW
 fn render_grid_view(
     ui: &mut egui::Ui,
     node: &mut FileNode,
@@ -123,69 +104,13 @@ fn render_grid_view(
     let mut delete_request: Option<usize> = None;
 
     let confirm_delete_id = ui.id().with("confirm_delete");
-    let mut show_delete_modal =
-        ui.data(|d| d.get_temp::<(bool, usize, String, usize)>(confirm_delete_id));
-
-    // Store the original order for restoring after drag
     let original_children = node.children.clone();
-
-    // Sort children: folders first (A-Z), then files (A-Z)
-    let mut folder_indices: Vec<usize> = Vec::new();
-    let mut file_indices: Vec<usize> = Vec::new();
-
-    for (idx, child) in node.children.iter().enumerate() {
-        if !settings.show_hidden_files && child.name.starts_with('.') {
-            continue;
-        }
-
-        if child.is_dir {
-            folder_indices.push(idx);
-        } else {
-            file_indices.push(idx);
-        }
-    }
-
-    if settings.sort_items {
-        folder_indices.sort_by(|&a, &b| {
-            node.children[a]
-                .name
-                .to_lowercase()
-                .cmp(&node.children[b].name.to_lowercase())
-        });
-        file_indices.sort_by(|&a, &b| {
-            node.children[a]
-                .name
-                .to_lowercase()
-                .cmp(&node.children[b].name.to_lowercase())
-        });
-    };
-
-    let mut sorted_indices = if settings.sort_folders_first {
-        folder_indices
-            .into_iter()
-            .chain(file_indices)
-            .collect::<Vec<_>>()
-    } else {
-        let mut all = folder_indices
-            .into_iter()
-            .chain(file_indices)
-            .collect::<Vec<_>>();
-        if settings.sort_items {
-            all.sort_by(|&a, &b| {
-                node.children[a]
-                    .name
-                    .to_lowercase()
-                    .cmp(&node.children[b].name.to_lowercase())
-            });
-        }
-        all
-    };
+    let mut sorted_indices = get_sorted_indices(node, settings);
 
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = egui::vec2(20.0, 20.0);
 
-            // Track which item is being dragged and folder rectangles
             let mut dragged_idx: Option<usize> = None;
             let mut folder_rects: Vec<(usize, usize, egui::Rect)> = Vec::new();
 
@@ -196,7 +121,6 @@ fn render_grid_view(
 
             let sorted_indices_snapshot = sorted_indices.clone();
 
-            // Use egui_dnd to make the children draggable
             let response = egui_dnd::dnd(ui, "file_explorer_dnd").show_vec_sized(
                 &mut sorted_indices,
                 size,
@@ -205,68 +129,37 @@ fn render_grid_view(
                     let is_folder = child.is_dir;
                     let icon = get_file_icon(&child.name, child.is_dir);
 
-                    // Track which item is being dragged
                     if state.dragged {
                         dragged_idx = Some(state.index);
                     }
 
-                    // Create a vertical layout for the item
                     ui.vertical(|ui| {
-                        // The drag handle needs to wrap the entire visual area
                         handle.ui(ui, |ui| {
-                            // Allocate space for the file/folder item
                             let (rect, resp) = ui
                                 .allocate_exact_size(egui::vec2(120.0, 80.0), egui::Sense::click());
 
-                            // Store folder rectangles for drop detection
                             if is_folder {
                                 let original_idx = sorted_indices_snapshot[state.index];
                                 folder_rects.push((state.index, original_idx, rect));
                             }
 
-                            // Check if mouse is over this folder during drag
                             let pointer_pos = ui.input(|i| i.pointer.hover_pos());
                             let is_drag_active = ui.input(|i| i.pointer.is_decidedly_dragging());
                             let is_drop_target = is_folder
                                 && is_drag_active
-                                && !state.dragged // This is NOT the item being dragged
-                                && Some(state.index) != dragged_idx // Not dragging onto itself
+                                && !state.dragged
+                                && Some(state.index) != dragged_idx
                                 && pointer_pos.map_or(false, |pos| rect.contains(pos));
 
-                            // Visual feedback
-                            if state.dragged {
-                                // Being dragged - show semi-transparent
-                                ui.painter().rect_filled(
-                                    rect,
-                                    5.0,
-                                    ui.style()
-                                        .visuals
-                                        .widgets
-                                        .inactive
-                                        .bg_fill
-                                        .gamma_multiply(0.3),
-                                );
-                            } else if is_drop_target {
-                                ui.painter().rect_filled(
-                                    rect,
-                                    5.0,
-                                    egui::Color32::from_rgba_premultiplied(100, 200, 255, 50),
-                                );
-                                ui.painter().rect_stroke(
-                                    rect,
-                                    5.0,
-                                    egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 200, 255)),
-                                    egui::StrokeKind::Outside,
-                                );
-                            } else if resp.hovered() && !is_drag_active {
-                                ui.painter().rect_filled(
-                                    rect,
-                                    5.0,
-                                    ui.style().visuals.widgets.hovered.weak_bg_fill,
-                                );
-                            }
+                            draw_item_feedback(
+                                ui,
+                                rect,
+                                state.dragged,
+                                is_drop_target,
+                                resp.hovered(),
+                                is_drag_active,
+                            );
 
-                            // Draw icon with reduced opacity if being dragged
                             let icon_color = if state.dragged {
                                 ui.style().visuals.text_color().gamma_multiply(0.5)
                             } else {
@@ -282,7 +175,6 @@ fn render_grid_view(
                                 icon_color,
                             );
 
-                            // Draw name with reduced opacity if being dragged
                             let name_pos = rect.center() + egui::vec2(0.0, 20.0);
                             ui.painter().text(
                                 name_pos,
@@ -292,32 +184,15 @@ fn render_grid_view(
                                 icon_color,
                             );
 
-                            // Double-click to navigate into folders
                             if resp.double_clicked() && is_folder && !is_drag_active {
                                 nav_request = Some(child.path.clone());
                             }
 
-                            // Right click context menu
                             resp.context_menu(|ui| {
-                                if ui.button("Delete").clicked() {
-                                    // Check if it's a folder with files
-                                    if is_folder && !child.children.is_empty() {
-                                        //show_delete_modal = true;
-                                        ui.data_mut(|d| {
-                                            d.insert_temp(
-                                                confirm_delete_id,
-                                                (
-                                                    true,
-                                                    child_idx,
-                                                    child.name.clone(),
-                                                    child.children.len(),
-                                                ),
-                                            )
-                                        });
-                                    } else {
-                                        delete_request = Some(child_idx);
-                                    }
-                                    ui.close();
+                                if let Some(idx) =
+                                    show_context_menu(ui, child, child_idx, confirm_delete_id)
+                                {
+                                    delete_request = Some(idx);
                                 }
                             });
                         });
@@ -325,128 +200,36 @@ fn render_grid_view(
                 },
             );
 
-            // Handle drop
             if let Some(update) = response.final_update() {
-                let from_idx = sorted_indices_snapshot[update.from];
-
-                // Check if pointer was released over a folder
-                let pointer_pos = ui.input(|i| i.pointer.hover_pos());
-
-                if let Some(pos) = pointer_pos {
-                    // Find which folder (if any) the item was dropped on
-                    let mut dropped_on_folder = false;
-                    for (_sorted_pos, folder_idx, rect) in &folder_rects {
-                        if rect.contains(pos) {
-                            if *folder_idx != from_idx {
-                                //let target_folder_idx = sorted_indices[*folder_idx];
-                                move_request = Some((from_idx, *folder_idx));
-                                dropped_on_folder = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    // If not dropped on a folder, restore original order
-                    if !dropped_on_folder {
-                        node.children = original_children.clone();
-                    }
+                if let Some(move_req) =
+                    handle_drop(ui, &update, &sorted_indices_snapshot, &folder_rects)
+                {
+                    move_request = Some(move_req);
                 } else {
-                    // No valid drop position, restore original order
                     node.children = original_children.clone();
                 }
             }
         });
     });
 
-    if let Some((show, idx, name, count)) = show_delete_modal {
-        if show {
-            let mut keep_open = true;
-            egui::Window::new("Confirm Delete")
-                .collapsible(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .show(ui.ctx(), |ui| {
-                    ui.label(format!("The folder '{}' contains {} item(s).", name, count));
-                    ui.label("Are you sure you want to delete it?");
-                    ui.separator();
-
-                    ui.horizontal(|ui| {
-                        if ui.button("Cancel").clicked() {
-                            keep_open = false;
-                        }
-                        if ui.button("Delete").clicked() {
-                            delete_request = Some(idx);
-                            keep_open = false;
-                        }
-                    });
-                });
-
-            if !keep_open {
-                ui.data_mut(|d| d.remove::<(bool, usize, String, usize)>(confirm_delete_id));
-            }
-        }
+    // Handle delete confirmation modal
+    if let Some(idx) = show_delete_confirmation_modal(ui, confirm_delete_id) {
+        delete_request = Some(idx);
     }
 
-    // Execute delete if requested
+    // Execute operations
     if let Some(idx) = delete_request {
-        let child = &node.children[idx];
-
-        let delete_result = if child.is_dir {
-            std::fs::remove_dir_all(&child.path)
-        } else {
-            std::fs::remove_file(&child.path)
-        };
-
-        match delete_result {
-            Ok(_) => {
-                node.children.remove(idx);
-            }
-            Err(e) => {
-                eprintln!("Failed to delete {}: {}", child.path.display(), e);
-            }
-        }
+        execute_delete(node, idx);
     }
 
-    // Execute move if requested
     if let Some((from_idx, target_folder_idx)) = move_request {
-        // Find the original item by name since indices might have changed
-        let moved_item = original_children[from_idx].clone();
-
-        // Find the target folder in original children
-        let target_folder = &original_children.clone()[target_folder_idx];
-        let target_path = target_folder.path.join(&moved_item.name);
-
-        // Perform actual filesystem move
-        match std::fs::rename(&moved_item.path, &target_path) {
-            Ok(_) => {
-                // Successfully moved - restore original order and refresh
-                node.children = original_children;
-
-                // Remove the moved item
-                node.children.retain(|child| child.path != moved_item.path);
-
-                // Refresh the target folder to show the new item
-                if let Some(target) = node
-                    .children
-                    .iter_mut()
-                    .find(|c| c.path == target_folder.path)
-                {
-                    target.refresh_children();
-                }
-
-                println!("Moved {} into {}", moved_item.name, target_folder.name);
-            }
-            Err(e) => {
-                // Failed to move - restore original order
-                node.children = original_children;
-                eprintln!("Failed to move file: {}", e);
-            }
-        }
+        execute_move(node, from_idx, target_folder_idx, original_children);
     }
 
     nav_request
 }
 
+// NORMAL VIEW
 fn render_normal_view(
     ui: &mut egui::Ui,
     node: &mut FileNode,
@@ -483,70 +266,14 @@ fn render_normal_view(
     let mut delete_request: Option<usize> = None;
 
     let confirm_delete_id = ui.id().with("confirm_delete");
-    let mut show_delete_modal =
-        ui.data(|d| d.get_temp::<(bool, usize, String, usize)>(confirm_delete_id));
-
-    // Store the original order for restoring after drag
     let original_children = node.children.clone();
-
-    // Sort children: folders first (A-Z), then files (A-Z)
-    let mut folder_indices: Vec<usize> = Vec::new();
-    let mut file_indices: Vec<usize> = Vec::new();
-
-    for (idx, child) in node.children.iter().enumerate() {
-        if !settings.show_hidden_files && child.name.starts_with('.') {
-            continue;
-        }
-
-        if child.is_dir {
-            folder_indices.push(idx);
-        } else {
-            file_indices.push(idx);
-        }
-    }
-
-    if settings.sort_items {
-        folder_indices.sort_by(|&a, &b| {
-            node.children[a]
-                .name
-                .to_lowercase()
-                .cmp(&node.children[b].name.to_lowercase())
-        });
-        file_indices.sort_by(|&a, &b| {
-            node.children[a]
-                .name
-                .to_lowercase()
-                .cmp(&node.children[b].name.to_lowercase())
-        });
-    };
-
-    let mut sorted_indices = if settings.sort_folders_first {
-        folder_indices
-            .into_iter()
-            .chain(file_indices)
-            .collect::<Vec<_>>()
-    } else {
-        let mut all = folder_indices
-            .into_iter()
-            .chain(file_indices)
-            .collect::<Vec<_>>();
-        if settings.sort_items {
-            all.sort_by(|&a, &b| {
-                node.children[a]
-                    .name
-                    .to_lowercase()
-                    .cmp(&node.children[b].name.to_lowercase())
-            });
-        }
-        all
-    };
+    let mut sorted_indices = get_sorted_indices(node, settings);
 
     egui::ScrollArea::vertical()
         .max_width(ui.available_width())
         .show(ui, |ui| {
             ui.spacing_mut().item_spacing = egui::vec2(32.0, 16.0);
 
-            // Track which item is being dragged and folder rectangles
             let mut dragged_idx: Option<usize> = None;
             let mut folder_rects: Vec<(usize, usize, egui::Rect)> = Vec::new();
 
@@ -558,14 +285,12 @@ fn render_normal_view(
                     let child = &node.children[child_idx];
                     let is_folder = child.is_dir;
 
-                    // Track which item is being dragged
                     if state.dragged {
                         dragged_idx = Some(state.index);
                     }
 
                     ui.vertical(|ui| {
                         handle.ui(ui, |ui| {
-                            // Allocate fixed height for horizontal layout
                             let (rect, resp) = ui.allocate_exact_size(
                                 egui::vec2(ui.available_width() - 3.0, 30.0),
                                 egui::Sense::click(),
@@ -576,49 +301,23 @@ fn render_normal_view(
                                 folder_rects.push((state.index, original_idx, rect));
                             }
 
-                            // Check if mouse is over this folder during drag
                             let pointer_pos = ui.input(|i| i.pointer.hover_pos());
                             let is_drag_active = ui.input(|i| i.pointer.is_decidedly_dragging());
                             let is_drop_target = is_folder
                                 && is_drag_active
-                                && !state.dragged // This is NOT the item being dragged
-                                && Some(state.index) != dragged_idx // Not dragging onto itself
+                                && !state.dragged
+                                && Some(state.index) != dragged_idx
                                 && pointer_pos.map_or(false, |pos| rect.contains(pos));
 
-                            // Visual feedback
-                            if state.dragged {
-                                // Being dragged - show semi-transparent
-                                ui.painter().rect_filled(
-                                    rect,
-                                    5.0,
-                                    ui.style()
-                                        .visuals
-                                        .widgets
-                                        .inactive
-                                        .bg_fill
-                                        .gamma_multiply(0.3),
-                                );
-                            } else if is_drop_target {
-                                ui.painter().rect_filled(
-                                    rect,
-                                    5.0,
-                                    egui::Color32::from_rgba_premultiplied(100, 200, 255, 50),
-                                );
-                                ui.painter().rect_stroke(
-                                    rect,
-                                    5.0,
-                                    egui::Stroke::new(2.0, egui::Color32::from_rgb(100, 200, 255)),
-                                    egui::StrokeKind::Outside,
-                                );
-                            } else if resp.hovered() && !is_drag_active {
-                                ui.painter().rect_filled(
-                                    rect,
-                                    5.0,
-                                    ui.style().visuals.widgets.hovered.weak_bg_fill,
-                                );
-                            }
+                            draw_item_feedback(
+                                ui,
+                                rect,
+                                state.dragged,
+                                is_drop_target,
+                                resp.hovered(),
+                                is_drag_active,
+                            );
 
-                            // Horizontal layout for icon + name
                             ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
                                 ui.horizontal(|ui| {
                                     let icon = get_file_icon(&child.name, child.is_dir);
@@ -685,32 +384,15 @@ fn render_normal_view(
                                 });
                             });
 
-                            // Double-click to navigate into folder
                             if resp.double_clicked() && is_folder && !is_drag_active {
                                 nav_request = Some(child.path.clone());
                             }
 
-                            // Right click context menu
                             resp.context_menu(|ui| {
-                                if ui.button("Delete").clicked() {
-                                    // Check if it's a folder with files
-                                    if is_folder && !child.children.is_empty() {
-                                        //show_delete_modal = true;
-                                        ui.data_mut(|d| {
-                                            d.insert_temp(
-                                                confirm_delete_id,
-                                                (
-                                                    true,
-                                                    child_idx,
-                                                    child.name.clone(),
-                                                    child.children.len(),
-                                                ),
-                                            )
-                                        });
-                                    } else {
-                                        delete_request = Some(child_idx);
-                                    }
-                                    ui.close();
+                                if let Some(idx) =
+                                    show_context_menu(ui, child, child_idx, confirm_delete_id)
+                                {
+                                    delete_request = Some(idx);
                                 }
                             });
                         });
@@ -718,122 +400,29 @@ fn render_normal_view(
                 },
             );
 
-            // Handle drop
             if let Some(update) = response.final_update() {
-                let from_idx = sorted_indices_snapshot[update.from];
-
-                // Check if pointer was released over a folder
-                let pointer_pos = ui.input(|i| i.pointer.hover_pos());
-
-                if let Some(pos) = pointer_pos {
-                    // Find which folder (if any) the item was dropped on
-                    let mut dropped_on_folder = false;
-                    for (_sorted_pos, folder_idx, rect) in &folder_rects {
-                        if rect.contains(pos) {
-                            if *folder_idx != from_idx {
-                                //let target_folder_idx = sorted_indices[*folder_idx];
-                                move_request = Some((from_idx, *folder_idx));
-                                dropped_on_folder = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    // If not dropped on a folder, restore original order
-                    if !dropped_on_folder {
-                        node.children = original_children.clone();
-                    }
+                if let Some(move_req) =
+                    handle_drop(ui, &update, &sorted_indices_snapshot, &folder_rects)
+                {
+                    move_request = Some(move_req);
                 } else {
-                    // No valid drop position, restore original order
                     node.children = original_children.clone();
                 }
             }
         });
 
-    if let Some((show, idx, name, count)) = show_delete_modal {
-        if show {
-            let mut keep_open = true;
-            egui::Window::new("Confirm Delete")
-                .collapsible(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .show(ui.ctx(), |ui| {
-                    ui.label(format!("The folder '{}' contains {} item(s).", name, count));
-                    ui.label("Are you sure you want to delete it?");
-                    ui.separator();
-
-                    ui.horizontal(|ui| {
-                        if ui.button("Cancel").clicked() {
-                            keep_open = false;
-                        }
-                        if ui.button("Delete").clicked() {
-                            delete_request = Some(idx);
-                            keep_open = false;
-                        }
-                    });
-                });
-
-            if !keep_open {
-                ui.data_mut(|d| d.remove::<(bool, usize, String, usize)>(confirm_delete_id));
-            }
-        }
+    // Handle delete confirmation modal
+    if let Some(idx) = show_delete_confirmation_modal(ui, confirm_delete_id) {
+        delete_request = Some(idx);
     }
 
-    // Execute delete if requested
+    // Execute operations
     if let Some(idx) = delete_request {
-        let child = &node.children[idx];
-
-        let delete_result = if child.is_dir {
-            std::fs::remove_dir_all(&child.path)
-        } else {
-            std::fs::remove_file(&child.path)
-        };
-
-        match delete_result {
-            Ok(_) => {
-                node.children.remove(idx);
-            }
-            Err(e) => {
-                eprintln!("Failed to delete {}: {}", child.path.display(), e);
-            }
-        }
+        execute_delete(node, idx);
     }
 
-    // Execute move if requested
     if let Some((from_idx, target_folder_idx)) = move_request {
-        // Find the original item by name since indices might have changed
-        let moved_item = original_children[from_idx].clone();
-
-        // Find the target folder in original children
-        let target_folder = &original_children.clone()[target_folder_idx];
-        let target_path = target_folder.path.join(&moved_item.name);
-
-        // Perform actual filesystem move
-        match std::fs::rename(&moved_item.path, &target_path) {
-            Ok(_) => {
-                // Successfully moved - restore original order and refresh
-                node.children = original_children;
-
-                // Remove the moved item
-                node.children.retain(|child| child.path != moved_item.path);
-
-                // Refresh the target folder to show the new item
-                if let Some(target) = node
-                    .children
-                    .iter_mut()
-                    .find(|c| c.path == target_folder.path)
-                {
-                    target.refresh_children();
-                }
-
-                println!("Moved {} into {}", moved_item.name, target_folder.name);
-            }
-            Err(e) => {
-                // Failed to move - restore original order
-                node.children = original_children;
-                eprintln!("Failed to move file: {}", e);
-            }
-        }
+        execute_move(node, from_idx, target_folder_idx, original_children);
     }
 
     nav_request
