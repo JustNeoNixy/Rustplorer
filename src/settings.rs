@@ -47,11 +47,20 @@ impl Settings {
 
                 ui.add_space(8.0);
 
-                ui.checkbox(&mut self.show_hidden_files, "Show hidden files");
+                ui.checkbox(
+                    &mut self.show_hidden_files,
+                    "Show hidden files (temporarily unfunctional)",
+                );
                 ui.add_space(4.0);
-                ui.checkbox(&mut self.sort_folders_first, "Sort folders first");
+                ui.checkbox(
+                    &mut self.sort_folders_first,
+                    "Sort folders first (temporarily unfunctional)",
+                );
                 ui.add_space(4.0);
-                ui.checkbox(&mut self.sort_items, "Sort items");
+                ui.checkbox(
+                    &mut self.sort_items,
+                    "Sort items (temporarily unfunctional)",
+                );
 
                 ui.add_space(16.0);
 
