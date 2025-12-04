@@ -113,6 +113,10 @@ fn format_file_size(bytes: u64) -> String {
     }
 }
 
+// TODO: Fix moving files/folders. if you drag a folder into another folder, the folder moves into dragged folder instead.
+// if you drag a file into a folder, it gives an error its not a directory in a console.
+// (BOTH VIEWS.)
+
 fn render_grid_view(
     ui: &mut egui::Ui,
     node: &mut FileNode,
@@ -120,6 +124,7 @@ fn render_grid_view(
 ) -> Option<std::path::PathBuf> {
     let mut nav_request = None;
     let mut move_request: Option<(usize, usize)> = None;
+    let mut delete_request: Option<usize> = None;
 
     // Store the original order for restoring after drag
     let original_children = node.children.clone();
@@ -288,6 +293,46 @@ fn render_grid_view(
                             if resp.double_clicked() && is_folder && !is_drag_active {
                                 nav_request = Some(child.path.clone());
                             }
+
+                            // TODO: Fix confirm delete window not showing.
+                            let mut show_delete_modal = false;
+                            // Right click context menu
+                            resp.context_menu(|ui| {
+                                if ui.button("Delete").clicked() {
+                                    // Check if it's a folder with files
+                                    if is_folder && !child.children.is_empty() {
+                                        show_delete_modal = true;
+                                    } else {
+                                        delete_request = Some(child_idx);
+                                    }
+                                    ui.close();
+                                }
+                            });
+
+                            if show_delete_modal {
+                                egui::Window::new("Confirm Delete")
+                                    .collapsible(false)
+                                    .resizable(false)
+                                    .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                                    .show(ui.ctx(), |ui| {
+                                        ui.label(format!(
+                                            "The folder '{}' contains {} item(s).",
+                                            child.name,
+                                            child.children.len()
+                                        ));
+                                        ui.label("Are you sure you want to delete it?");
+                                        ui.separator();
+
+                                        ui.horizontal(|ui| {
+                                            if ui.button("Cancel").clicked() {
+                                                // Modal will close automatically
+                                            }
+                                            if ui.button("Delete").clicked() {
+                                                delete_request = Some(child_idx);
+                                            }
+                                        });
+                                    });
+                            }
                         });
                     });
                 },
@@ -323,6 +368,26 @@ fn render_grid_view(
             }
         });
     });
+
+    // Execute delete if requested
+    if let Some(idx) = delete_request {
+        let child = &node.children[idx];
+
+        let delete_result = if child.is_dir {
+            std::fs::remove_dir_all(&child.path)
+        } else {
+            std::fs::remove_file(&child.path)
+        };
+
+        match delete_result {
+            Ok(_) => {
+                node.children.remove(idx);
+            }
+            Err(e) => {
+                eprintln!("Failed to delete {}: {}", child.path.display(), e);
+            }
+        }
+    }
 
     // Execute move if requested
     if let Some((from_idx, target_folder_idx)) = move_request {
@@ -397,6 +462,7 @@ fn render_normal_view(
 
     let mut nav_request = None;
     let mut move_request: Option<(usize, usize)> = None;
+    let mut delete_request: Option<usize> = None;
 
     // Store the original order for restoring after drag
     let original_children = node.children.clone();
@@ -598,6 +664,46 @@ fn render_normal_view(
                             if resp.double_clicked() && is_folder && !is_drag_active {
                                 nav_request = Some(child.path.clone());
                             }
+
+                            // TODO: Fix confirm delete window not showing.
+                            let mut show_delete_modal = false;
+                            // Right click context menu
+                            resp.context_menu(|ui| {
+                                if ui.button("Delete").clicked() {
+                                    // Check if it's a folder with files
+                                    if is_folder && !child.children.is_empty() {
+                                        show_delete_modal = true;
+                                    } else {
+                                        delete_request = Some(child_idx);
+                                    }
+                                    ui.close();
+                                }
+                            });
+
+                            if show_delete_modal {
+                                egui::Window::new("Confirm Delete")
+                                    .collapsible(false)
+                                    .resizable(false)
+                                    .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                                    .show(ui.ctx(), |ui| {
+                                        ui.label(format!(
+                                            "The folder '{}' contains {} item(s).",
+                                            child.name,
+                                            child.children.len()
+                                        ));
+                                        ui.label("Are you sure you want to delete it?");
+                                        ui.separator();
+
+                                        ui.horizontal(|ui| {
+                                            if ui.button("Cancel").clicked() {
+                                                // Modal will close automatically
+                                            }
+                                            if ui.button("Delete").clicked() {
+                                                delete_request = Some(child_idx);
+                                            }
+                                        });
+                                    });
+                            }
                         });
                     });
                 },
@@ -632,6 +738,26 @@ fn render_normal_view(
                 }
             }
         });
+
+    // Execute delete if requested
+    if let Some(idx) = delete_request {
+        let child = &node.children[idx];
+
+        let delete_result = if child.is_dir {
+            std::fs::remove_dir_all(&child.path)
+        } else {
+            std::fs::remove_file(&child.path)
+        };
+
+        match delete_result {
+            Ok(_) => {
+                node.children.remove(idx);
+            }
+            Err(e) => {
+                eprintln!("Failed to delete {}: {}", child.path.display(), e);
+            }
+        }
+    }
 
     // Execute move if requested
     if let Some((from_idx, target_folder_idx)) = move_request {
