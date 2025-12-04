@@ -122,6 +122,10 @@ fn render_grid_view(
     let mut move_request: Option<(usize, usize)> = None;
     let mut delete_request: Option<usize> = None;
 
+    let confirm_delete_id = ui.id().with("confirm_delete");
+    let mut show_delete_modal =
+        ui.data(|d| d.get_temp::<(bool, usize, String, usize)>(confirm_delete_id));
+
     // Store the original order for restoring after drag
     let original_children = node.children.clone();
 
@@ -293,45 +297,29 @@ fn render_grid_view(
                                 nav_request = Some(child.path.clone());
                             }
 
-                            // TODO: Fix confirm delete window not showing.
-                            let mut show_delete_modal = false;
                             // Right click context menu
                             resp.context_menu(|ui| {
                                 if ui.button("Delete").clicked() {
                                     // Check if it's a folder with files
                                     if is_folder && !child.children.is_empty() {
-                                        show_delete_modal = true;
+                                        //show_delete_modal = true;
+                                        ui.data_mut(|d| {
+                                            d.insert_temp(
+                                                confirm_delete_id,
+                                                (
+                                                    true,
+                                                    child_idx,
+                                                    child.name.clone(),
+                                                    child.children.len(),
+                                                ),
+                                            )
+                                        });
                                     } else {
                                         delete_request = Some(child_idx);
                                     }
                                     ui.close();
                                 }
                             });
-
-                            if show_delete_modal {
-                                egui::Window::new("Confirm Delete")
-                                    .collapsible(false)
-                                    .resizable(false)
-                                    .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                                    .show(ui.ctx(), |ui| {
-                                        ui.label(format!(
-                                            "The folder '{}' contains {} item(s).",
-                                            child.name,
-                                            child.children.len()
-                                        ));
-                                        ui.label("Are you sure you want to delete it?");
-                                        ui.separator();
-
-                                        ui.horizontal(|ui| {
-                                            if ui.button("Cancel").clicked() {
-                                                // Modal will close automatically
-                                            }
-                                            if ui.button("Delete").clicked() {
-                                                delete_request = Some(child_idx);
-                                            }
-                                        });
-                                    });
-                            }
                         });
                     });
                 },
@@ -369,6 +357,35 @@ fn render_grid_view(
             }
         });
     });
+
+    if let Some((show, idx, name, count)) = show_delete_modal {
+        if show {
+            let mut keep_open = true;
+            egui::Window::new("Confirm Delete")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ui.ctx(), |ui| {
+                    ui.label(format!("The folder '{}' contains {} item(s).", name, count));
+                    ui.label("Are you sure you want to delete it?");
+                    ui.separator();
+
+                    ui.horizontal(|ui| {
+                        if ui.button("Cancel").clicked() {
+                            keep_open = false;
+                        }
+                        if ui.button("Delete").clicked() {
+                            delete_request = Some(idx);
+                            keep_open = false;
+                        }
+                    });
+                });
+
+            if !keep_open {
+                ui.data_mut(|d| d.remove::<(bool, usize, String, usize)>(confirm_delete_id));
+            }
+        }
+    }
 
     // Execute delete if requested
     if let Some(idx) = delete_request {
@@ -464,6 +481,10 @@ fn render_normal_view(
     let mut nav_request = None;
     let mut move_request: Option<(usize, usize)> = None;
     let mut delete_request: Option<usize> = None;
+
+    let confirm_delete_id = ui.id().with("confirm_delete");
+    let mut show_delete_modal =
+        ui.data(|d| d.get_temp::<(bool, usize, String, usize)>(confirm_delete_id));
 
     // Store the original order for restoring after drag
     let original_children = node.children.clone();
@@ -669,45 +690,29 @@ fn render_normal_view(
                                 nav_request = Some(child.path.clone());
                             }
 
-                            // TODO: Fix confirm delete window not showing.
-                            let mut show_delete_modal = false;
                             // Right click context menu
                             resp.context_menu(|ui| {
                                 if ui.button("Delete").clicked() {
                                     // Check if it's a folder with files
                                     if is_folder && !child.children.is_empty() {
-                                        show_delete_modal = true;
+                                        //show_delete_modal = true;
+                                        ui.data_mut(|d| {
+                                            d.insert_temp(
+                                                confirm_delete_id,
+                                                (
+                                                    true,
+                                                    child_idx,
+                                                    child.name.clone(),
+                                                    child.children.len(),
+                                                ),
+                                            )
+                                        });
                                     } else {
                                         delete_request = Some(child_idx);
                                     }
                                     ui.close();
                                 }
                             });
-
-                            if show_delete_modal {
-                                egui::Window::new("Confirm Delete")
-                                    .collapsible(false)
-                                    .resizable(false)
-                                    .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                                    .show(ui.ctx(), |ui| {
-                                        ui.label(format!(
-                                            "The folder '{}' contains {} item(s).",
-                                            child.name,
-                                            child.children.len()
-                                        ));
-                                        ui.label("Are you sure you want to delete it?");
-                                        ui.separator();
-
-                                        ui.horizontal(|ui| {
-                                            if ui.button("Cancel").clicked() {
-                                                // Modal will close automatically
-                                            }
-                                            if ui.button("Delete").clicked() {
-                                                delete_request = Some(child_idx);
-                                            }
-                                        });
-                                    });
-                            }
                         });
                     });
                 },
@@ -744,6 +749,35 @@ fn render_normal_view(
                 }
             }
         });
+
+    if let Some((show, idx, name, count)) = show_delete_modal {
+        if show {
+            let mut keep_open = true;
+            egui::Window::new("Confirm Delete")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ui.ctx(), |ui| {
+                    ui.label(format!("The folder '{}' contains {} item(s).", name, count));
+                    ui.label("Are you sure you want to delete it?");
+                    ui.separator();
+
+                    ui.horizontal(|ui| {
+                        if ui.button("Cancel").clicked() {
+                            keep_open = false;
+                        }
+                        if ui.button("Delete").clicked() {
+                            delete_request = Some(idx);
+                            keep_open = false;
+                        }
+                    });
+                });
+
+            if !keep_open {
+                ui.data_mut(|d| d.remove::<(bool, usize, String, usize)>(confirm_delete_id));
+            }
+        }
+    }
 
     // Execute delete if requested
     if let Some(idx) = delete_request {
