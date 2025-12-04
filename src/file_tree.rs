@@ -115,6 +115,7 @@ fn format_file_size(bytes: u64) -> String {
 
 // TODO: Fix moving files/folders. if you drag a folder into another folder, the folder moves into dragged folder instead.
 // if you drag a file into a folder, it gives an error its not a directory in a console.
+// (found out the issue is with a sorting system.)
 // (BOTH VIEWS.)
 
 fn render_grid_view(
