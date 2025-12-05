@@ -124,7 +124,10 @@ pub fn render_list_view(
                                                 use std::os::windows::fs::MetadataExt;
 
                                                 let meta = std::fs::metadata(&child.path).unwrap();
+                                                #[cfg(target_os = "linux")]
                                                 let size = meta.size();
+                                                #[cfg(target_os = "windows")]
+                                                let size = meta.file_size();
 
                                                 ui.add_sized(
                                                     [100.0, 20.0],
