@@ -40,8 +40,12 @@ pub fn render_list_view(
     let mut delete_request: Option<usize> = None;
 
     let confirm_delete_id = ui.id().with("confirm_delete");
-    let original_children = node.children.clone();
-    let mut sorted_indices = sorting::get_sorted_indices(node, settings);
+
+    node.ensure_children_loaded();
+    let children = node.children.as_mut().unwrap();
+
+    let original_children = children.clone();
+    let mut sorted_indices = sorting::get_sorted_indices_for_vec(children, settings);
 
     egui::ScrollArea::vertical()
         .max_width(ui.available_width())
@@ -56,7 +60,7 @@ pub fn render_list_view(
             let response = egui_dnd::dnd(ui, "file_explorer_dnd").show_vec(
                 &mut sorted_indices,
                 |ui, &mut child_idx, handle, state| {
-                    let child = &node.children[child_idx];
+                    let child = &children[child_idx];
                     let is_folder = child.is_dir;
 
                     if state.dragged {
@@ -185,7 +189,7 @@ pub fn render_list_view(
                 {
                     move_request = Some(move_req);
                 } else {
-                    node.children = original_children.clone();
+                    *children = original_children.clone();
                 }
             }
         });

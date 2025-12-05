@@ -2,11 +2,11 @@ use crate::file_system::file_tree::FileNode;
 use crate::ui::settings::Settings;
 
 // Get sorted indices based on settings
-pub fn get_sorted_indices(node: &FileNode, settings: &Settings) -> Vec<usize> {
+pub fn get_sorted_indices_for_vec(children: &[FileNode], settings: &Settings) -> Vec<usize> {
     let mut folder_indices: Vec<usize> = Vec::new();
     let mut file_indices: Vec<usize> = Vec::new();
 
-    for (idx, child) in node.children.iter().enumerate() {
+    for (idx, child) in children.iter().enumerate() {
         if !settings.show_hidden_files && child.name.starts_with('.') {
             continue;
         }
@@ -20,20 +20,17 @@ pub fn get_sorted_indices(node: &FileNode, settings: &Settings) -> Vec<usize> {
 
     if settings.sort_items {
         let sort_fn = |&a: &usize, &b: &usize| {
-            node.children[a]
+            children[a]
                 .name
                 .to_lowercase()
-                .cmp(&node.children[b].name.to_lowercase())
+                .cmp(&children[b].name.to_lowercase())
         };
         folder_indices.sort_by(sort_fn);
         file_indices.sort_by(sort_fn);
     }
 
     if settings.sort_folders_first {
-        folder_indices
-            .into_iter()
-            .chain(file_indices)
-            .collect::<Vec<_>>()
+        folder_indices.into_iter().chain(file_indices).collect()
     } else {
         let mut all = folder_indices
             .into_iter()
@@ -41,10 +38,10 @@ pub fn get_sorted_indices(node: &FileNode, settings: &Settings) -> Vec<usize> {
             .collect::<Vec<_>>();
         if settings.sort_items {
             all.sort_by(|&a, &b| {
-                node.children[a]
+                children[a]
                     .name
                     .to_lowercase()
-                    .cmp(&node.children[b].name.to_lowercase())
+                    .cmp(&children[b].name.to_lowercase())
             });
         }
         all

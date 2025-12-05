@@ -14,8 +14,12 @@ pub fn render_grid_view(
     let mut delete_request: Option<usize> = None;
 
     let confirm_delete_id = ui.id().with("confirm_delete");
-    let original_children = node.children.clone();
-    let mut sorted_indices = sorting::get_sorted_indices(node, settings);
+
+    node.ensure_children_loaded();
+    let children = node.children.as_mut().unwrap();
+
+    let original_children = children.clone();
+    let mut sorted_indices = sorting::get_sorted_indices_for_vec(children, settings);
 
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.horizontal_wrapped(|ui| {
@@ -35,7 +39,7 @@ pub fn render_grid_view(
                 &mut sorted_indices,
                 size,
                 |ui, &mut child_idx, handle, state| {
-                    let child = &node.children[child_idx];
+                    let child = &children[child_idx];
                     let is_folder = child.is_dir;
                     let icon = get_file_icon(&child.name, child.is_dir);
 
@@ -119,7 +123,7 @@ pub fn render_grid_view(
                 {
                     move_request = Some(move_req);
                 } else {
-                    node.children = original_children.clone();
+                    *children = original_children.clone();
                 }
             }
         });

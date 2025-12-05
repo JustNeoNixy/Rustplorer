@@ -22,7 +22,8 @@ impl MyApp {
 
         cc.egui_ctx.set_fonts(fonts);
 
-        let tree = file_tree::build_file_tree(&initial_path);
+        let mut tree = file_tree::FileNode::new(&initial_path);
+        tree.ensure_children_loaded();
 
         Self {
             current_root: initial_path.clone(),
@@ -44,7 +45,10 @@ impl MyApp {
             self.history_index += 1;
 
             self.current_root = path.to_path_buf();
-            self.file_tree = file_tree::build_file_tree(path);
+
+            let mut node = file_tree::FileNode::new(path);
+            node.ensure_children_loaded();
+            self.file_tree = node;
         }
     }
 
@@ -53,7 +57,9 @@ impl MyApp {
             self.history_index -= 1;
             let prev_path = &self.history[self.history_index];
             self.current_root = prev_path.clone();
-            self.file_tree = file_tree::build_file_tree(prev_path);
+            let mut node = file_tree::FileNode::new(prev_path);
+            node.ensure_children_loaded();
+            self.file_tree = node;
         }
     }
 

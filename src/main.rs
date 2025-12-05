@@ -7,8 +7,6 @@ mod ui;
 mod utils;
 mod views;
 
-// For some reason it doesnt want to show a window if you run it in home directory.
-// TODO: Fixes
 fn main() -> eframe::Result {
     let args: Vec<String> = std::env::args().collect();
     let initial_path = if args.len() > 1 {

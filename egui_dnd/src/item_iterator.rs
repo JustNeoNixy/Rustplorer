@@ -196,7 +196,7 @@ impl<'a> ItemIterator<'a> {
         &mut self,
         ui: &mut Ui,
         id: Id,
-        content: impl FnOnce(&mut Ui, Vec2),
+        _content: impl FnOnce(&mut Ui, Vec2),
     ) {
         if let Some((hovering_id, _pos)) = self.hovering_item {
             if hovering_id == id {
