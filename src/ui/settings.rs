@@ -19,7 +19,7 @@ pub enum Theme {
 #[derive(Debug, Clone, PartialEq)]
 pub enum View {
     Grid,
-    Normal,
+    List,
 }
 
 impl Default for Settings {
@@ -29,7 +29,7 @@ impl Default for Settings {
             sort_folders_first: true,
             sort_items: true,
             theme: Theme::System,
-            view: View::Normal,
+            view: View::List,
         }
     }
 }
@@ -70,7 +70,7 @@ impl Settings {
                 ui.label("View:");
                 ui.horizontal(|ui| {
                     ui.radio_value(&mut self.view, View::Grid, "Grid");
-                    ui.radio_value(&mut self.view, View::Normal, "Normal");
+                    ui.radio_value(&mut self.view, View::List, "List");
                 });
 
                 ui.add_space(16.0);
