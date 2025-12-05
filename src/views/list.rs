@@ -118,7 +118,10 @@ pub fn render_list_view(
                                         egui::Layout::right_to_left(egui::Align::Center),
                                         |ui| {
                                             if !child.is_dir {
+                                                #[cfg(target_os = "linux")]
                                                 use std::os::unix::fs::MetadataExt;
+                                                #[cfg(target_os = "windows")]
+                                                use std::os::windows::fs::MetadataExt;
 
                                                 let meta = std::fs::metadata(&child.path).unwrap();
                                                 let size = meta.size();
