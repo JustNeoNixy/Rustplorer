@@ -2,46 +2,6 @@ use super::file_tree::FileNode;
 use eframe::egui;
 
 // Handle delete confirmation modal
-/*pub fn show_delete_confirmation_modal(
-    ui: &mut egui::Ui,
-    confirm_delete_id: egui::Id,
-) -> Option<usize> {
-    let mut delete_request = None;
-
-    if let Some((show, idx, name, count)) =
-        ui.data(|d| d.get_temp::<(bool, usize, String, usize)>(confirm_delete_id))
-    {
-        if show {
-            let mut keep_open = true;
-            egui::Window::new("Confirm Delete")
-                .collapsible(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .show(ui.ctx(), |ui| {
-                    ui.label(format!("The folder '{}' contains {} item(s).", name, count));
-                    ui.label("Are you sure you want to delete it?");
-                    ui.separator();
-
-                    ui.horizontal(|ui| {
-                        if ui.button("Cancel").clicked() {
-                            keep_open = false;
-                        }
-                        if ui.button("Delete").clicked() {
-                            delete_request = Some(idx);
-                            keep_open = false;
-                        }
-                    });
-                });
-
-            if !keep_open {
-                ui.data_mut(|d| d.remove::<(bool, usize, String, usize)>(confirm_delete_id));
-            }
-        }
-    }
-
-    delete_request
-}*/
-
 pub fn show_delete_confirmation_modal(
     ui: &mut egui::Ui,
     confirm_delete_id: egui::Id,
